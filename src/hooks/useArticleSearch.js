@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { searchArticles, getErrorMessage } from "../api/nyt.js";
 
 const PAGE_SIZE = 10;
@@ -12,9 +12,15 @@ export default function useArticleSearch(query) {
   const [error, setError] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  // Ultima query richiesta: serve a scartare le risposte di "Show more"
+  // arrivate dopo che l'utente ha già cambiato ricerca.
+  const latestQuery = useRef(query);
+
   // Nuova ricerca: riparte dalla prima pagina
   useEffect(() => {
+    latestQuery.current = query;
     setArticles([]);
+    setLoadingMore(false);
     setHits(0);
     setPage(0);
     setError(null);
@@ -46,16 +52,21 @@ export default function useArticleSearch(query) {
   }, [query]);
 
   const loadMore = useCallback(async () => {
+    const requestedQuery = query;
     const next = page + 1;
+    const isCurrent = () => latestQuery.current === requestedQuery;
+
     setLoadingMore(true);
     try {
-      const result = await searchArticles(query, next);
+      const result = await searchArticles(requestedQuery, next);
+      if (!isCurrent()) return; // risposta di una ricerca vecchia: la ignoro
       setArticles((prev) => [...prev, ...result.articles]);
       setPage(next);
     } catch (err) {
+      if (!isCurrent()) return;
       setError(getErrorMessage(err));
     } finally {
-      setLoadingMore(false);
+      if (isCurrent()) setLoadingMore(false);
     }
   }, [query, page]);
 

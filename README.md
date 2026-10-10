@@ -2,6 +2,9 @@
 
 Clone della home del New York Times realizzato con React, che mostra le notizie della **Top Stories API**.
 
+**Demo online:** https://nytclonee.netlify.app/  
+**Codice:** https://github.com/GiuseppeB-portfolio/nyt-clone
+
 ## Avvio
 
 ```bash
@@ -21,7 +24,7 @@ React, Vite, React Router, Axios, Context API, Tailwind CSS.
 ```
 src/
   api/          istanza Axios, cache in sessionStorage, gestione errori
-  components/   Header, Footer, HeroArticle, ArticleCard, Loader, ErrorMessage
+  components/   Header, Footer, HeroArticle, ArticleCard, Loader, ErrorMessage, FeedState
   context/      ArticlesContext: cache degli articoli per sezione
   data/         elenco delle sezioni
   hooks/        useTopStories(sezione)

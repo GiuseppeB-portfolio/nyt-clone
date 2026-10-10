@@ -6,13 +6,13 @@ const ArticlesContext = createContext(null);
 // cache: { [sezione]: { status: "loading" | "success" | "error", articles, error } }
 export function ArticlesProvider({ children }) {
   const [cache, setCache] = useState({});
-  const cacheRef = useRef(cache);
-  cacheRef.current = cache;
+  // Ref aggiornati solo nelle callback della richiesta, mai durante il render:
+  // dicono a load() se una sezione è già in corso o già caricata con successo.
   const inflight = useRef({});
+  const loaded = useRef({});
 
   const load = useCallback((section, { force = false } = {}) => {
-    const current = cacheRef.current[section];
-    if (!force && (inflight.current[section] || current?.status === "success")) return;
+    if (!force && (inflight.current[section] || loaded.current[section])) return;
 
     inflight.current[section] = true;
     setCache((c) => ({
@@ -21,15 +21,17 @@ export function ArticlesProvider({ children }) {
     }));
 
     fetchTopStories(section)
-      .then((articles) =>
-        setCache((c) => ({ ...c, [section]: { status: "success", articles } }))
-      )
-      .catch((err) =>
+      .then((articles) => {
+        loaded.current[section] = true;
+        setCache((c) => ({ ...c, [section]: { status: "success", articles } }));
+      })
+      .catch((err) => {
+        loaded.current[section] = false;
         setCache((c) => ({
           ...c,
           [section]: { status: "error", articles: [], error: getErrorMessage(err) },
-        }))
-      )
+        }));
+      })
       .finally(() => {
         inflight.current[section] = false;
       });

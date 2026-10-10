@@ -4,8 +4,7 @@ import useTopStories from "../hooks/useTopStories.js";
 import { SECTIONS } from "../data/sections.js";
 import HeroArticle from "../components/HeroArticle.jsx";
 import ArticleCard from "../components/ArticleCard.jsx";
-import Loader from "../components/Loader.jsx";
-import ErrorMessage from "../components/ErrorMessage.jsx";
+import FeedState from "../components/FeedState.jsx";
 import NotFound from "./NotFound.jsx";
 
 export default function Section() {
@@ -30,13 +29,15 @@ function SectionContent({ id, label }) {
         {label}
       </h1>
 
-      {status === "error" ? (
-        <ErrorMessage message={error} onRetry={reload} />
-      ) : !articles.length ? (
-        <Loader />
-      ) : (
-        <SectionStories articles={articles} />
-      )}
+      <FeedState
+        status={status}
+        error={error}
+        articles={articles}
+        onRetry={reload}
+        emptyMessage={`There are no stories in ${label} right now. Check back later.`}
+      >
+        {(articles) => <SectionStories articles={articles} />}
+      </FeedState>
     </>
   );
 }

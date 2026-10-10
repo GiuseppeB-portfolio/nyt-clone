@@ -4,20 +4,25 @@ import useTopStories from "../hooks/useTopStories.js";
 import { formatDate, getImage } from "../utils/format.js";
 import { getSectionLabel } from "../data/sections.js";
 import ArticleCard from "../components/ArticleCard.jsx";
-import Loader from "../components/Loader.jsx";
-import ErrorMessage from "../components/ErrorMessage.jsx";
+import FeedState from "../components/FeedState.jsx";
 
 export default function ArticleDetail() {
   const { feed, id } = useParams();
   const { articles, status, error, reload } = useTopStories(feed);
+
+  return (
+    <FeedState status={status} error={error} articles={articles} onRetry={reload}>
+      {(articles) => <ArticleView articles={articles} feed={feed} id={id} />}
+    </FeedState>
+  );
+}
+
+function ArticleView({ articles, feed, id }) {
   const article = articles.find((a) => a.id === id);
 
   useEffect(() => {
     if (article) document.title = `${article.title} - The New York Times clone`;
   }, [article]);
-
-  if (status === "error") return <ErrorMessage message={error} onRetry={reload} />;
-  if (!articles.length) return <Loader />;
 
   if (!article) {
     return (

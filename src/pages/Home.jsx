@@ -2,8 +2,7 @@ import { useEffect } from "react";
 import useTopStories from "../hooks/useTopStories.js";
 import HeroArticle from "../components/HeroArticle.jsx";
 import ArticleCard from "../components/ArticleCard.jsx";
-import Loader from "../components/Loader.jsx";
-import ErrorMessage from "../components/ErrorMessage.jsx";
+import FeedState from "../components/FeedState.jsx";
 
 export default function Home() {
   const { articles, status, error, reload } = useTopStories("home");
@@ -12,9 +11,14 @@ export default function Home() {
     document.title = "The New York Times clone";
   }, []);
 
-  if (status === "error") return <ErrorMessage message={error} onRetry={reload} />;
-  if (!articles.length) return <Loader />;
+  return (
+    <FeedState status={status} error={error} articles={articles} onRetry={reload}>
+      {(articles) => <HomeStories articles={articles} />}
+    </FeedState>
+  );
+}
 
+function HomeStories({ articles }) {
   // L'articolo principale è il primo che ha un'immagine
   const lead = articles.find((a) => a.images.length) ?? articles[0];
   const rest = articles.filter((a) => a !== lead);

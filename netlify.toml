@@ -3,6 +3,8 @@
 [build]
   publish = "dist"
   functions = "netlify/functions"
+  # Le build automatiche di Netlify vengono sempre saltate: pubblica solo la pipeline
+  ignore = "exit 0"
 
 [functions]
   node_bundler = "esbuild"

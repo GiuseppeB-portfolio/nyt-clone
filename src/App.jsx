@@ -8,6 +8,7 @@ import ArticleDetail from "./pages/ArticleDetail.jsx";
 import Search from "./pages/Search.jsx";
 import NotFound from "./pages/NotFound.jsx";
 import DebugSentry from "./pages/DebugSentry.jsx";
+const variabileInutilizzata = 42;
 
 function ScrollToTop() {
   const { pathname } = useLocation();

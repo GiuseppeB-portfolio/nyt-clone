@@ -8,7 +8,7 @@ export default function useArticleSearch(query) {
   const [articles, setArticles] = useState([]);
   const [hits, setHits] = useState(0);
   const [page, setPage] = useState(0);
-  const [status, setStatus] = useState("idle"); // idle | loading | success | error
+  const [status, setStatus] = useState(query ? "loading" : "idle"); // idle | loading | success | error
   const [error, setError] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -16,22 +16,25 @@ export default function useArticleSearch(query) {
   // arrivate dopo che l'utente ha già cambiato ricerca.
   const latestQuery = useRef(query);
 
-  // Nuova ricerca: riparte dalla prima pagina
-  useEffect(() => {
-    latestQuery.current = query;
+  // Nuova ricerca: riparte dalla prima pagina. Il reset avviene durante il render
+  // (non in un effect) così React non deve fare un secondo render a cascata.
+  const [prevQuery, setPrevQuery] = useState(query);
+  if (query !== prevQuery) {
+    setPrevQuery(query);
     setArticles([]);
     setLoadingMore(false);
     setHits(0);
     setPage(0);
     setError(null);
+    setStatus(query ? "loading" : "idle");
+  }
 
-    if (!query) {
-      setStatus("idle");
-      return;
-    }
+  // L'effect si occupa solo della richiesta di rete
+  useEffect(() => {
+    latestQuery.current = query;
+    if (!query) return;
 
     let cancelled = false; // evita di mostrare i risultati di una ricerca vecchia
-    setStatus("loading");
 
     searchArticles(query, 0)
       .then((result) => {

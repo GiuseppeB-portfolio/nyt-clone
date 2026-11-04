@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useArticlesContext } from "../context/ArticlesContext.jsx";
+import { useArticlesContext } from "../context/articlesContext.js";
 
 export default function useTopStories(section) {
   const { cache, load } = useArticlesContext();

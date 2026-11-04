@@ -1,7 +1,6 @@
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { ArticlesContext } from "./articlesContext.js";
 import { fetchTopStories, getErrorMessage } from "../api/nyt.js";
-
-const ArticlesContext = createContext(null);
 
 // cache: { [sezione]: { status: "loading" | "success" | "error", articles, error } }
 export function ArticlesProvider({ children }) {
@@ -42,10 +41,4 @@ export function ArticlesProvider({ children }) {
       {children}
     </ArticlesContext.Provider>
   );
-}
-
-export function useArticlesContext() {
-  const ctx = useContext(ArticlesContext);
-  if (!ctx) throw new Error("useArticlesContext va usato dentro ArticlesProvider");
-  return ctx;
 }

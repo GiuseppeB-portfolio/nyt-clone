@@ -5,19 +5,31 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "npm --prefix server run dev",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint . --max-warnings=0",
+    "test": "npm --prefix server test"
   },
   "dependencies": {
+    "@sentry/react": "^11.10.0",
     "axios": "^1.20.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.14.0",
     "tailwindcss": "^4.3.3",
     "vite": "^8.3.1"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

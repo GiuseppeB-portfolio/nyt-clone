@@ -1,0 +1,28 @@
+# Ambiente di sviluppo locale: front end (nginx) + back end (proxy Express).
+# Avvio: docker compose up --build   →   http://localhost:8080
+services:
+  backend:
+    build:
+      context: ./server
+    env_file:
+      - path: .env        # contiene NYT_API_KEY, mai committato
+        required: false   # in CI il file non esiste: il container parte comunque
+    environment:
+      PORT: 3001
+      APP_ENV: development
+    expose:
+      - "3001"            # raggiungibile solo dagli altri container, non dall'host
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_APP_ENV: development
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

@@ -1,0 +1,102 @@
+name: Deploy su Netlify
+
+# Workflow riutilizzabile, chiamato da ci-cd.yml per staging e production.
+# I secrets sono quelli dell'Environment GitHub con lo stesso nome.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Netlify (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Controlla che i secrets necessari esistano
+        env:
+          NYT_API_KEY: ${{ secrets.NYT_API_KEY }}
+        run: |
+          missing=0
+          for name in NETLIFY_AUTH_TOKEN NETLIFY_SITE_ID NYT_API_KEY; do
+            if [ -z "${!name}" ]; then echo "::error::Secret $name mancante nell'environment ${{ inputs.environment }}"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Build
+        env:
+          VITE_APP_ENV: ${{ inputs.environment }}
+          VITE_APP_RELEASE: ${{ github.sha }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+        run: npm run build
+
+      # Ultima difesa: se il valore reale della chiave fosse finito nel bundle, il deploy si ferma
+      - name: Verifica che la chiave non sia nel bundle
+        env:
+          NYT_API_KEY: ${{ secrets.NYT_API_KEY }}
+        run: |
+          if grep -rqF "$NYT_API_KEY" dist; then
+            echo "::error::La chiave NYT è presente nel bundle: deploy annullato"
+            exit 1
+          fi
+
+      # La chiave viene passata alla Netlify Function come variabile segreta del deploy.
+      # GitHub maschera automaticamente i secrets nei log (compaiono come ***).
+      - name: Deploy
+        id: deploy
+        env:
+          NYT_API_KEY: ${{ secrets.NYT_API_KEY }}
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            target="--prod"
+          else
+            target="--alias=staging"
+          fi
+          npx --yes netlify-cli@27 deploy \
+            --dir=dist \
+            --functions=netlify/functions \
+            --no-build \
+            $target \
+            --secret-env "NYT_API_KEY=$NYT_API_KEY" \
+            --env "APP_ENV=${{ inputs.environment }}" \
+            --message "${{ inputs.environment }} · ${GITHUB_SHA::7} · run ${{ github.run_number }}" \
+            --json > deploy.json
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            url=$(jq -r '.url' deploy.json)
+          else
+            url=$(jq -r '.deploy_url' deploy.json)
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deploy pubblicato su $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test online
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          for i in 1 2 3 4 5; do
+            if curl -fsS "$url/api/health" | tee health.json | jq -e '.apiKeyConfigured == true'; then
+              curl -fsS "$url/" | grep -q '<div id="root">'
+              exit 0
+            fi
+            echo "Tentativo $i fallito, riprovo tra 5 secondi"; sleep 5
+          done
+          echo "::error::Il sito non risponde correttamente su $url"
+          exit 1

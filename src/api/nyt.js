@@ -1,15 +1,10 @@
 import axios from "axios";
 
+// Il browser non parla più direttamente con la NYT: chiama il nostro proxy su /api,
+// che aggiunge la chiave lato server (Express in locale, Netlify Function online).
 const client = axios.create({
-  baseURL: "https://api.nytimes.com/svc/topstories/v2",
-  params: { "api-key": import.meta.env.VITE_NYT_API_KEY },
-  timeout: 10000,
-});
-
-const searchClient = axios.create({
-  baseURL: "https://api.nytimes.com/svc/search/v2",
-  params: { "api-key": import.meta.env.VITE_NYT_API_KEY },
-  timeout: 10000,
+  baseURL: "/api",
+  timeout: 12000,
 });
 
 // La API permette 5 richieste al minuto: teniamo una piccola cache nel browser.
@@ -59,7 +54,7 @@ export async function fetchTopStories(feed) {
   const cached = readCache(key);
   if (cached) return cached;
 
-  const { data } = await client.get(`/${feed}.json`);
+  const { data } = await client.get(`/topstories/${feed}`);
   const articles = data.results.filter((a) => a.title).map((a) => normalize(a, feed));
   writeCache(key, articles);
   return articles;
@@ -96,8 +91,8 @@ export async function searchArticles(query, page = 0) {
   const cached = readCache(key);
   if (cached) return cached;
 
-  const { data } = await searchClient.get("/articlesearch.json", {
-    params: { q: query, page, sort: "relevance" },
+  const { data } = await client.get("/search", {
+    params: { q: query, page },
   });
   const { docs = [], metadata, meta } = data.response;
   const result = {
@@ -109,12 +104,13 @@ export async function searchArticles(query, page = 0) {
 }
 
 export function getErrorMessage(error) {
-  if (!import.meta.env.VITE_NYT_API_KEY) {
-    return "API key missing. Add VITE_NYT_API_KEY to your .env file and restart the dev server.";
-  }
   const status = error.response?.status;
+  const code = error.response?.data?.error;
+  if (code === "MISSING_API_KEY") {
+    return "The server has no NYT API key. Add NYT_API_KEY to your .env file and restart the API.";
+  }
   if (status === 401) return "The API key is not valid, or the API needed here (Top Stories or Article Search) is not enabled for your app.";
   if (status === 429) return "Too many requests. The NYT API allows 5 per minute: wait a moment and try again.";
-  if (error.code === "ECONNABORTED") return "The request timed out. Check your connection and try again.";
+  if (status === 504 || error.code === "ECONNABORTED") return "The request timed out. Check your connection and try again.";
   return "We couldn't load the stories. Try again in a moment.";
 }

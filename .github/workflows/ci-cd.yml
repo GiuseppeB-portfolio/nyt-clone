@@ -1,0 +1,125 @@
+name: CI/CD
+
+# push su main    → CI completa + deploy in produzione
+# push su staging → CI completa + deploy in staging
+# pull request    → solo CI (nessun deploy)
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Una sola esecuzione per branch alla volta; quelle vecchie non vengono interrotte
+# a metà deploy, si mettono in coda.
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    name: Lint e test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Installa dipendenze
+        run: |
+          npm ci --no-audit --no-fund
+          npm --prefix server ci --no-audit --no-fund
+
+      # Se il linting fallisce il job diventa rosso e tutti i job successivi vengono saltati
+      - name: ESLint
+        run: npm run lint
+
+      - name: Test del proxy
+        run: npm test
+
+  secret-scan:
+    name: Scansione secrets (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # tutta la history, non solo l'ultimo commit
+
+      # Cerca chiavi e token in TUTTI i commit; --redact evita di stamparli nel log
+      - name: gitleaks
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            git /repo --redact --verbose --no-banner
+
+  build:
+    name: Build e container
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Build di produzione
+        run: npm run build
+
+      # Il front end non deve mai contattare direttamente la NYT né contenere la chiave
+      - name: Verifica che il bundle non contenga la API NYT
+        run: |
+          if grep -rlE "api\.nytimes\.com|api-key" dist; then
+            echo "::error::Il bundle contiene riferimenti diretti alla API NYT"
+            exit 1
+          fi
+
+      - name: Build delle immagini Docker
+        run: docker compose build
+
+      # Avvia lo stack come in locale e controlla che risponda (senza chiave reale)
+      - name: Smoke test docker compose
+        run: |
+          docker compose up -d --wait --wait-timeout 90
+          curl -fsS http://localhost:8080/ | grep -q '<div id="root">'
+          curl -fsS http://localhost:8080/section/world | grep -q '<div id="root">'
+          curl -fsS http://localhost:8080/api/health
+          echo
+          docker compose ps
+
+      - name: Log dei container (solo in caso di errore)
+        if: failure()
+        run: docker compose logs
+
+      - name: Spegni lo stack
+        if: always()
+        run: docker compose down
+
+  deploy-staging:
+    name: Deploy staging
+    needs: [build, secret-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+    secrets: inherit
+
+  deploy-production:
+    name: Deploy production
+    needs: [build, secret-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+    secrets: inherit

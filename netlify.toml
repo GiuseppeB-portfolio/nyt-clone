@@ -1,0 +1,10 @@
+# Il deploy lo fa la pipeline GitHub Actions (netlify deploy --no-build):
+# questi valori servono a Netlify per sapere dove sono sito e function.
+[build]
+  publish = "dist"
+  functions = "netlify/functions"
+  # Le build automatiche di Netlify vengono sempre saltate: pubblica solo la pipeline
+  ignore = "exit 0"
+
+[functions]
+  node_bundler = "esbuild"

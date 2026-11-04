@@ -1,0 +1,2 @@
+# Falso positivo: segnaposto "la_tua_chiave" nel primo .env.example, nessuna chiave reale
+565045c90f0699ddf388f78f5ab55de84f003f92:.env.example:generic-api-key:1

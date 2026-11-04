@@ -7,6 +7,7 @@ import Section from "./pages/Section.jsx";
 import ArticleDetail from "./pages/ArticleDetail.jsx";
 import Search from "./pages/Search.jsx";
 import NotFound from "./pages/NotFound.jsx";
+import DebugSentry from "./pages/DebugSentry.jsx";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/section/:section" element={<Section />} />
         <Route path="/search" element={<Search />} />
         <Route path="/article/:feed/:id" element={<ArticleDetail />} />
+        <Route path="/debug/sentry" element={<DebugSentry />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

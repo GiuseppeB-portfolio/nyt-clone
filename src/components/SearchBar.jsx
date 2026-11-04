@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 export default function SearchBar() {
@@ -6,11 +6,14 @@ export default function SearchBar() {
   const [params] = useSearchParams();
   const current = params.get("q") ?? "";
   const [value, setValue] = useState(current);
+  const [syncedWith, setSyncedWith] = useState(current);
 
-  // Mantiene il campo allineato all'URL (es. con i pulsanti avanti/indietro)
-  useEffect(() => {
+  // Mantiene il campo allineato all'URL (es. con i pulsanti avanti/indietro).
+  // Aggiornare lo stato durante il render, invece che in un effect, evita un render in più.
+  if (current !== syncedWith) {
+    setSyncedWith(current);
     setValue(current);
-  }, [current]);
+  }
 
   function handleSubmit(e) {
     e.preventDefault();

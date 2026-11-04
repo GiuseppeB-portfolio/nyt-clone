@@ -135,8 +135,10 @@ In **Settings → Environments** ci sono due environment, `staging` e `productio
 |---|---|---|
 | `NYT_API_KEY` | chiave della NYT, passata alla Netlify Function | developer.nytimes.com → Apps |
 | `NETLIFY_AUTH_TOKEN` | autorizza `netlify-cli` a pubblicare | Netlify → User settings → Applications → Personal access tokens |
-| `NETLIFY_SITE_ID` | identifica il sito | Netlify → Site configuration → Site ID |
+| `NETLIFY_SITE_ID` | identifica il sito | Netlify → Project configuration → General → Project ID |
 | `VITE_SENTRY_DSN` | progetto Sentry a cui inviare gli errori | Sentry → Project settings → Client Keys (DSN) |
+
+Ogni environment ha il suo token Netlify, creato con una scadenza lunga e un nome riconoscibile (per esempio `github-actions-production`): se uno viene compromesso si revoca senza bloccare l'altro ambiente, e dalla pagina dei token di Netlify si vede in anticipo quando sta per scadere. Un token scaduto fa fallire il deploy al passo *Deploy*, mai in silenzio.
 
 Sull'environment `production` si può aggiungere una regola di protezione (solo branch `main`).
 
@@ -171,9 +173,9 @@ flowchart LR
 | **Scansione secrets** | gitleaks su tutta la history | deploy bloccato |
 | **Build e container** | build Vite, controllo del bundle, `docker compose build`, avvio dello stack e smoke test con `curl` | deploy bloccato, in fondo al job compaiono i log dei container |
 
-Per vedere la pipeline fallire sul linting basta un push con una variabile inutilizzata, per esempio `const x = 1;` in un componente: il job *Lint e test* diventa rosso con l'errore `no-unused-vars` e i job successivi risultano *skipped*.
+Il fallimento è stato verificato con la [pull request #2](https://github.com/GiuseppeB-portfolio/nyt-clone/pull/2), aperta apposta con una riga `const variabileInutilizzata = 42;` in `src/App.jsx`: il job *Lint e test* è diventato rosso in 13 secondi, *Build e container* e i deploy sono stati saltati, e GitHub ha mostrato l'errore direttamente nelle *Annotations* con file e riga (`src/App.jsx#L11`, `no-unused-vars`). La pull request è stata poi chiusa senza merge.
 
-Il linting ha già trovato tre problemi reali al primo avvio, corretti in questo branch: due `setState` chiamati in modo sincrono dentro `useEffect` (in `SearchBar` e `useArticleSearch`, causavano un render in più a ogni ricerca) e un file che esportava insieme un componente e un hook, rompendo il Fast Refresh di Vite.
+Il linting ha trovato anche tre problemi reali al primo avvio, corretti prima del primo merge: due `setState` chiamati in modo sincrono dentro `useEffect` (in `SearchBar` e `useArticleSearch`, causavano un render in più a ogni ricerca) e un file che esportava insieme un componente e un hook, rompendo il Fast Refresh di Vite.
 
 ---
 
@@ -189,7 +191,16 @@ File: `.github/workflows/deploy.yml`, workflow riutilizzabile chiamato due volte
 
 L'URL pubblicato compare nella pagina della run (riquadro dell'environment e *Summary*) e nella sezione **Deployments** del repository.
 
-Dato che il deploy lo fa la pipeline, nelle impostazioni del sito Netlify le build automatiche vanno disattivate (*Site configuration → Build & deploy → Continuous deployment → Stop builds*), altrimenti Netlify pubblicherebbe ogni push per conto suo saltando la CI.
+Il sito Netlify era collegato al repository GitHub, quindi Netlify avrebbe fatto una sua build a ogni push, saltando la CI e senza la chiave per la function. Per impedirlo `netlify.toml` contiene:
+
+```toml
+[build]
+  ignore = "exit 0"
+```
+
+Netlify esegue il comando `ignore` prima di ogni build partita da Git: uscita 0 significa "niente da costruire", quindi la build si ferma subito. Sulle pull request il bot di Netlify lo conferma con il commento *Deploy Preview canceled*. I deploy della pipeline non ne risentono, perché usano `netlify deploy --no-build` e non passano da Git. Si è scelta questa soluzione invece del pulsante *Stop builds* perché vive nel repository: è versionata, visibile nella review e non dipende da un'impostazione nascosta nell'interfaccia.
+
+Lo staging è un deploy con alias, che Netlify tratta come anteprima. Sui progetti recenti le anteprime sono private per impostazione predefinita (visibili solo dopo il login a Netlify), e in quel caso lo smoke test della pipeline riceve la pagina di accesso al posto del JSON e fallisce. Per questo in *Project configuration → General → Visitor access → Project visibility* sia la produzione sia le anteprime sono impostate come **pubbliche**. Nello staging non c'è nulla di riservato: la chiave resta comunque nella function.
 
 ---
 
@@ -228,6 +239,24 @@ Il health check non chiama la NYT di proposito: con un controllo ogni 5 minuti c
 
 ---
 
+## 7. Problemi incontrati e soluzioni
+
+| Problema | Causa | Soluzione |
+|---|---|---|
+| La chiave NYT era leggibile nel sito pubblico | Le variabili `VITE_*` vengono scritte nel bundle JavaScript | Back end proxy: la chiave resta lato server (Express in locale, Netlify Function online) |
+| Tre errori di ESLint al primo avvio | `setState` sincroni negli effect e un file che esportava componente e hook | Codice corretto, nessuna regola allentata |
+| gitleaks segnalava una chiave nel primo commit | Era il segnaposto `la_tua_chiave` in `.env.example` | Eccezione in `.gitleaksignore` limitata a quel commit e a quella riga |
+| Docker Desktop non partiva su Windows | WSL 2 non installato | `wsl --install --no-distribution`, riavvio, `wsl --update` |
+| Opzione *Stop builds* non trovata nella nuova interfaccia di Netlify | Il sito è collegato a GitHub e Netlify avrebbe costruito ogni push | `ignore = "exit 0"` in `netlify.toml` |
+| Smoke test dello staging fallito con il sito funzionante | Anteprime Netlify private per impostazione predefinita | Visibilità delle anteprime impostata su pubblica |
+| Deploy in produzione rimasto circa 20 minuti in coda | Attesa di un runner GitHub (il job in sé è durato 58 secondi) | Nessuna: rallentamento occasionale, il deploy successivo è stato regolare |
+
+## 8. Possibili miglioramenti
+
+Caricare le **source maps** su Sentry durante il deploy, così gli errori mostrano il file sorgente e la riga originale invece del bundle compilato. Proteggere il branch `main` richiedendo che la CI sia verde prima del merge. Dare allo staging una chiave NYT separata da quella di produzione, così i test non consumano la quota del sito pubblico. Integrare Sentry anche nella Netlify Function, per tracciare gli errori del proxy oltre a quelli del browser.
+
+---
+
 ## Struttura
 
 ```
@@ -252,9 +281,9 @@ L'API restituisce titolo, abstract e immagini, non il testo completo: la pagina 
 
 ## Consegna
 
-- [ ] Screenshot di `docker compose ps` con i due container *healthy*
-- [ ] Screenshot o link della pipeline verde
-- [ ] Screenshot della pipeline rossa per un errore di lint
-- [ ] URL pubblico: https://nytclonee.netlify.app/ e link alla run del deploy
-- [ ] Screenshot della dashboard UptimeRobot
-- [ ] Screenshot di Sentry con l'errore simulato
+- [x] Avvio in locale: `docker compose ps` con i due container *healthy*
+- [x] Pipeline verde: [pull request #1](https://github.com/GiuseppeB-portfolio/nyt-clone/pull/1) e deploy in produzione in [Actions](https://github.com/GiuseppeB-portfolio/nyt-clone/actions)
+- [x] Pipeline rossa per un errore di lint: [pull request #2](https://github.com/GiuseppeB-portfolio/nyt-clone/pull/2)
+- [x] URL pubblico: https://nytclonee.netlify.app/ (staging: https://staging--nytclonee.netlify.app/)
+- [x] UptimeRobot: due monitor *Up* (sito e API con controllo della parola chiave)
+- [x] Sentry: errore gestito ed errore di render simulati da `/debug/sentry`, registrati con `environment: production` e `release` del commit
